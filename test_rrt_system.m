@@ -5,7 +5,7 @@ close all;
 
 % Configuration
 dimensions = [300, 300, 100];
-numAerial = 2;
+numAerial = 1;
 numGround = 2;
 testDuration = 1200; % seconds
 
