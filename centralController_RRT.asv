@@ -424,17 +424,7 @@ classdef centralController_RRT < handle
                             i, currentMotion(1), currentMotion(2), currentMotion(3));
                     end
                 end
-                
-                % Debug assignments before setup
-                fprintf('Debug: Pre-setup assignments:\n');
-                if ~isempty(obj.vehicleAssignments) && obj.vehicleAssignments.Count > 0
-                    keys = obj.vehicleAssignments.keys;
-                    for k = 1:length(keys)
-                        fprintf('Debug: %s assigned to survivor %d\n', ...
-                            keys{k}, obj.vehicleAssignments(keys{k}));
-                    end
-                end
-                
+        
                 % Store assignments before setup
                 preSetupAssignments = containers.Map('KeyType', 'char', 'ValueType', 'double');
                 if ~isempty(obj.vehicleAssignments) && obj.vehicleAssignments.Count > 0
@@ -450,86 +440,9 @@ classdef centralController_RRT < handle
                 setup(obj.environment.scenario);
                 obj.missionStatus = 'INITIALIZING';
         
-                fprintf('\nDebug: Post-setup state validation:\n');
-                % Validate and potentially restore vehicle positions
-                for i = 1:obj.numAerialVehicles
-                    if ~isempty(obj.aerialPlatforms{i})
-                        currentMotion = obj.aerialPlatforms{i}.read();
-                        fprintf('Debug: Post-setup UAV%d position initial read: [%.2f, %.2f, %.2f]\n', ...
-                            i, currentMotion(1), currentMotion(2), currentMotion(3));
-                        
-                        if isempty(currentMotion) || all(currentMotion(1:3) == 0)
-                            fprintf('Debug: Restoring UAV%d position\n', i);
-                            initialPos = [15.0, 15.0, obj.CRUISE_HEIGHT];
-                            % Create full motion vector with 16 elements
-                            newMotion = zeros(1,16);
-                            % [1-3]: Position
-                            newMotion(1:3) = initialPos;  
-                            % [4-6]: Linear velocity
-                            newMotion(4:6) = [0 0 0];     
-                            % [7-9]: Angular velocity
-                            newMotion(7:9) = [0 0 0];  
-                            % [10-13]: Orientation quaternion (must be normalized)
-                            newMotion(10:13) = [1 0 0 0]; 
-                            % [14-16]: Linear acceleration
-                            newMotion(14:16) = [0 0 0];   
-                            move(obj.aerialPlatforms{i}, newMotion);
-                            
-                            % Verify restoration
-                            currentMotion = obj.aerialPlatforms{i}.read();
-                            fprintf('Debug: UAV%d position after restore: [%.2f, %.2f, %.2f]\n', ...
-                                i, currentMotion(1), currentMotion(2), currentMotion(3));
-                        end
-                    end
-                end
-        
-                for i = 1:obj.numGroundVehicles
-                    if ~isempty(obj.groundPlatforms{i})
-                        currentMotion = obj.groundPlatforms{i}.read();
-                        fprintf('Debug: Post-setup Ground%d position initial read: [%.2f, %.2f, %.2f]\n', ...
-                            i, currentMotion(1), currentMotion(2), currentMotion(3));
-                        
-                        if isempty(currentMotion) || all(currentMotion(1:3) == 0)
-                            fprintf('Debug: Restoring Ground%d position\n', i);
-                            initialPos = [150.0, 20.0, 0];  % Default initial ground position
-                            % Create full motion vector with 16 elements
-                            newMotion = zeros(1,16);
-                            % [1-3]: Position
-                            newMotion(1:3) = initialPos;  
-                            % [4-6]: Linear velocity
-                            newMotion(4:6) = [0 0 0];     
-                            % [7-9]: Angular velocity
-                            newMotion(7:9) = [0 0 0];  
-                            % [10-13]: Orientation quaternion (must be normalized)
-                            newMotion(10:13) = [1 0 0 0]; 
-                            % [14-16]: Linear acceleration
-                            newMotion(14:16) = [0 0 0];   
-                            move(obj.groundPlatforms{i}, newMotion);
-                            
-                            % Verify restoration
-                            currentMotion = obj.groundPlatforms{i}.read();
-                            fprintf('Debug: Ground%d position after restore: [%.2f, %.2f, %.2f]\n', ...
-                                i, currentMotion(1), currentMotion(2), currentMotion(3));
-                        end
-                    end
-                end
-                
-                % Restore assignments if they were lost
-                if obj.vehicleAssignments.Count < preSetupAssignments.Count
-                    fprintf('Debug: Assignments were lost during setup. Restoring...\n');
-                    obj.vehicleAssignments = containers.Map('KeyType', 'char', 'ValueType', 'double');
-                    keys = preSetupAssignments.keys;
-                    for k = 1:length(keys)
-                        key = char(keys{k});
-                        value = double(preSetupAssignments(key));
-                        obj.vehicleAssignments(key) = value;
-                        fprintf('Debug: Restored assignment %s -> %d\n', key, value);
-                    end
-                end
-                        
-                % Create visualization figure
+                 % Create visualization figure
                 fig = figure('Name', 'Search and Rescue Mission', 'Position', [100, 100, 1200, 800]);
-                
+        
                 % Initial scene setup
                 ax1 = subplot(1,2,1); % 3D view
                 obj.environment.show();
@@ -539,98 +452,57 @@ classdef centralController_RRT < handle
                 light('Position',[1 1 1]);
                 grid on;
                 axis equal;
-                
+        
                 ax2 = subplot(1,2,2); % Top-down view
                 obj.environment.show();
                 title('Top-Down View - Initial State');
                 view(0, 90);
                 grid on;
                 axis equal;
-                
+        
                 % Create axes list for easy reference
                 axes_list = [ax1, ax2];
                 hold(ax1, 'on');
                 hold(ax2, 'on');
         
-                % Show initial vehicle positions
-                for ax = axes_list
-                    % Only clear vehicle and path visualizations
-                    children = get(ax, 'Children');
-                    for child = children'
-                        if ~strcmp(get(child, 'Tag'), 'survivor') && ...
-                           ~strcmp(get(child, 'Tag'), 'environment') && ...
-                           ~strcmp(get(child, 'Tag'), 'building')  % Add building tag
-                            delete(child);
-                        end
-                    end
-                    hold(ax, 'on');
-                    
-                    % Redraw environment if needed
-                    if ~any(strcmp(get(children, 'Tag'), 'environment'))
-                        obj.environment.show();
-                        % Tag environment objects
-                        envChildren = get(ax, 'Children');
-                        for child = envChildren'
-                            set(child, 'Tag', 'environment');
-                        end
-                    end
-                    
-                    % Update vehicle positions and paths
-                    obj.visualizeCurrentState(ax);
-                end
-                
-                % Show survivors with clear priorities
+                % Add survivors with priorities to both views
                 for ax = axes_list
                     survivors = obj.survivorManager.Survivors;
                     for i = 1:length(survivors)
                         pos = survivors(i).Position;
                         switch survivors(i).Priority
                             case 1 % High priority
-                                h = plot3(ax, pos(1), pos(2), pos(3), 'r*', 'MarkerSize', 15, 'LineWidth', 2);
-                                text(ax, pos(1), pos(2), pos(3)+5, 'High Priority', 'Color', 'red');
+                                h = plot3(ax, pos(1), pos(2), pos(3), 'r*', ...
+                                    'MarkerSize', 15, 'LineWidth', 2, 'Tag', 'survivor');
+                                text(ax, pos(1), pos(2), pos(3)+5, 'High Priority', ...
+                                    'Color', 'red', 'Tag', 'survivor_label');
                             case 2 % Medium priority
-                                h = plot3(ax, pos(1), pos(2), pos(3), 'y*', 'MarkerSize', 15, 'LineWidth', 2);
-                                text(ax, pos(1), pos(2), pos(3)+5, 'Medium Priority', 'Color', 'yellow');
+                                h = plot3(ax, pos(1), pos(2), pos(3), 'y*', ...
+                                    'MarkerSize', 15, 'LineWidth', 2, 'Tag', 'survivor');
+                                text(ax, pos(1), pos(2), pos(3)+5, 'Medium Priority', ...
+                                    'Color', 'yellow', 'Tag', 'survivor_label');
                             case 3 % Low priority
-                                h = plot3(ax, pos(1), pos(2), pos(3), 'g*', 'MarkerSize', 15, 'LineWidth', 2);
-                                text(ax, pos(1), pos(2), pos(3)+5, 'Low Priority', 'Color', 'green');
+                                h = plot3(ax, pos(1), pos(2), pos(3), 'g*', ...
+                                    'MarkerSize', 15, 'LineWidth', 2, 'Tag', 'survivor');
+                                text(ax, pos(1), pos(2), pos(3)+5, 'Low Priority', ...
+                                    'Color', 'green', 'Tag', 'survivor_label');
                         end
-                        h.Tag = 'survivor';
                     end
+                    
+                    % Show initial vehicle positions
+                    obj.visualizeCurrentState(ax);
                 end
-                
-                % Pause to show initial state
+        
+                % Keep this part - showing initial state and pausing
                 fprintf('\nInitial state displayed. Press any key to start path planning...\n');
                 pause;
-                
+                        
                 % Start mission execution
                 obj.missionStatus = 'PLANNING';
                 
                 % Assign initial targets (high priority first)
                 [assignmentsMade, assignedSurvivorIDs] = obj.assignSurvivorsToVehicles();
                 fprintf('\nInitial assignments made: %d survivors assigned to vehicles\n', assignmentsMade);
-                
-                % Show planned paths
-                for ax = axes_list
-                    % Plot paths with different colors and styles
-                    for i = 1:obj.numAerialVehicles
-                        if ~isempty(obj.vehiclePaths{i})
-                            path = obj.vehiclePaths{i};
-                            plot3(ax, path(:,1), path(:,2), path(:,3), 'r-', 'LineWidth', 2);
-                        end
-                    end
-                    for i = 1:obj.numGroundVehicles
-                        idx = obj.numAerialVehicles + i;
-                        if ~isempty(obj.vehiclePaths{idx})
-                            path = obj.vehiclePaths{idx};
-                            plot3(ax, path(:,1), path(:,2), path(:,3), 'b-', 'LineWidth', 2);
-                        end
-                    end
-                end
-                
-                % Pause to show planned paths
-                fprintf('\nPaths planned. Press any key to start movement...\n');
-                pause;
                 
                 % Start movement
                 obj.missionStatus = 'ACTIVE';
@@ -659,19 +531,24 @@ classdef centralController_RRT < handle
                         % Update vehicle paths
                         obj.updateVehiclePaths();
                         
-                        % Clear and update visualization
+                        % Update visualization for each axis
                         for ax = axes_list
-                            children = get(ax, 'Children');
-                            for child = children'
-                                if ~strcmp(get(child, 'Tag'), 'survivor') && ...
-                                   ~strcmp(get(child, 'Tag'), 'environment')
-                                    delete(child);
+                            if isvalid(ax)  % Check if axis handle is still valid
+                                % Clear only vehicle and path visualizations
+                                children = get(ax, 'Children');
+                                for child = children'
+                                    if isvalid(child)  % Check if child handle is still valid
+                                        if ~isempty(get(child, 'Tag')) && ...  % Check if Tag property exists
+                                           ~any(strcmp(get(child, 'Tag'), {'survivor', 'environment', 'building'}))
+                                            delete(child);
+                                        end
+                                    end
                                 end
+                                
+                                % Update vehicle positions and paths
+                                hold(ax, 'on');
+                                obj.visualizeCurrentState(ax);
                             end
-                            hold(ax, 'on');
-                            
-                            % Update vehicle positions and paths
-                            obj.visualizeCurrentState(ax);
                         end
                         
                         lastCheckTime = currentTime;
@@ -689,7 +566,7 @@ classdef centralController_RRT < handle
                 
             catch e
                 fprintf('\nError in mission: %s\n', e.message);
-                fprintf('Error stack trace:\n%s\n', getReport(e));
+                fprintf('Stack trace:\n%s\n', getReport(e));
                 status = false;
             end
         end
@@ -705,131 +582,182 @@ classdef centralController_RRT < handle
        end
 
        % Add survivor detection checking
-     function checkSurvivorDetection(obj)
-            DETECTION_RADIUS = 5.0;  % meters
-            AERIAL_DETECTION_HEIGHT = 10.0; % meters - new parameter for descent
-            DESCENT_THRESHOLD = 15.0; % meters
+        function checkSurvivorDetection(obj)
+    % Constants for detection and movement
+    DETECTION_RADIUS = 5.0;            % Detection radius in meters
+    DETECTION_HEIGHT = 10.0;           % Height above survivor for detection
+    DESCENT_START_DIST = 15.0;         % Distance to start descent
+    defaultCruiseHeight = obj.CRUISE_HEIGHT;  % Get standard cruise height from class constant
     
-            
-            % Get all keys and ensure they're char type
-            if ~isempty(obj.vehicleAssignments) && obj.vehicleAssignments.Count > 0
-                assignmentKeys = obj.vehicleAssignments.keys;
+    fprintf('\n=== Beginning Detection Cycle ===\n');
+    fprintf('Time: %.2f\n', obj.environment.scenario.CurrentTime);
+    
+    % Only proceed if we have assignments
+    if ~isempty(obj.vehicleAssignments) && obj.vehicleAssignments.Count > 0
+        assignmentKeys = obj.vehicleAssignments.keys;
+        fprintf('Active Assignments: %d\n', length(assignmentKeys));
+        
+        for k = 1:length(assignmentKeys)
+            try
+                % Get vehicle and survivor info
+                vehicleID = char(assignmentKeys{k});
+                survivorID = obj.vehicleAssignments(vehicleID);
+                survivor = obj.findSurvivorByID(survivorID);
                 
-                for k = 1:length(assignmentKeys)
-                    try
-                        % Ensure vehicleID is char type when accessing map
-                        vehicleID = char(assignmentKeys{k});
-                        survivorID = obj.vehicleAssignments(vehicleID);
+                if ~isempty(survivor)
+                    fprintf('\n=== Processing Vehicle %s ===\n', vehicleID);
+                    fprintf('Target Survivor: %d (Current Status: %s)\n', survivorID, survivor.Status);
+                    
+                    % Handle aerial vehicles
+                    if contains(vehicleID, 'UAV')
+                        idx = str2double(vehicleID(4:end));
+                        platform = obj.aerialPlatforms{idx};
+                        currentMotion = platform.read();
+                        vehiclePos = currentMotion(1:3);
                         
-                        % Get survivor object
-                        survivor = obj.findSurvivorByID(survivorID);
+                        % Calculate distances and heights
+                        horizontalDist = norm(survivor.Position(1:2) - vehiclePos(1:2));
+                        detectHeight = survivor.Position(3) + DETECTION_HEIGHT;
+                        currentHeight = vehiclePos(3);
                         
-                        if ~isempty(survivor) && strcmp(survivor.Status, 'IN_PROGRESS')
-                            % Different handling for aerial and ground vehicles
-                            if contains(vehicleID, 'UAV')
-                                idx = str2double(vehicleID(4:end));
-                                platform = obj.aerialPlatforms{idx};
-                                currentMotion = platform.read();
-                                vehiclePos = currentMotion(1:3);
+                        fprintf('\n=== UAV%d Height Analysis ===\n', idx);
+                        fprintf('1. Height Conditions:\n');
+                        fprintf('  - Cruise height: %.2f (current: %.2f, diff: %.2f)\n', ...
+                            defaultCruiseHeight, currentHeight, abs(currentHeight - defaultCruiseHeight));
+                        fprintf('  - Detection height: %.2f (target: %.2f, diff: %.2f)\n', ...
+                            currentHeight, detectHeight, abs(currentHeight - detectHeight));
+                        
+                        fprintf('2. Distance Analysis:\n');
+                        fprintf('  - Horizontal distance: %.2f\n', horizontalDist);
+                        fprintf('  - Descent threshold: %.2f\n', DESCENT_START_DIST);
+                        fprintf('  - Detection radius: %.2f\n', DETECTION_RADIUS);
+                        
+                        % State checks
+                        isAtCruiseHeight = abs(currentHeight - defaultCruiseHeight) < 2.0;
+                        isAtDetectHeight = abs(currentHeight - detectHeight) < 2.0;
+                        shouldDescend = horizontalDist < DESCENT_START_DIST && isAtCruiseHeight;
+                        canDetect = horizontalDist < DETECTION_RADIUS && isAtDetectHeight;
+                        
+                        fprintf('3. State Checks:\n');
+                        fprintf('  - At cruise height: %d\n', isAtCruiseHeight);
+                        fprintf('  - At detection height: %d\n', isAtDetectHeight);
+                        fprintf('  - Should start descent: %d\n', shouldDescend);
+                        fprintf('  - Can detect survivor: %d\n', canDetect);
+                        
+                        % Handle descent
+                        if shouldDescend
+                            fprintf('\n=== Initiating Descent ===\n');
+                            fprintf('UAV%d descending from %.2f to %.2f meters\n', ...
+                                idx, currentHeight, detectHeight);
+                            
+                            descentPos = vehiclePos;
+                            descentPos(3) = detectHeight;
+                            [success, descentPath] = obj.planPath(vehiclePos, descentPos, true);
+                            
+                            if success
+                                obj.vehiclePaths{idx} = descentPath;
+                                fprintf('Descent path planned: %d waypoints\n', size(descentPath, 1));
+                            else
+                                fprintf('Warning: Failed to plan descent path!\n');
+                            end
+                        end
+                        
+                        % Handle detection
+                        if canDetect
+                            fprintf('\n=== Survivor Detection Event ===\n');
+                            fprintf('UAV%d detecting survivor %d\n', idx, survivorID);
+                            
+                            survivor.Status = 'DETECTED';
+                            obj.vehicleAssignments.remove(vehicleID);
+                            
+                            % Plan return to cruise height
+                            returnPos = vehiclePos;
+                            returnPos(3) = defaultCruiseHeight;
+                            [success, path] = obj.planPath(vehiclePos, returnPos, true);
+                            
+                            if success
+                                obj.vehiclePaths{idx} = path;
+                                fprintf('Return path planned: %d waypoints\n', size(path, 1));
                                 
-                                % Get horizontal and vertical distances separately
-                                horizontal_dist = norm(survivor.Position(1:2) - vehiclePos(1:2));
-                                height_diff = abs(vehiclePos(3) - (survivor.Position(3) + AERIAL_DETECTION_HEIGHT));
+                                [assignmentsMade, ~] = obj.assignSurvivorsToVehicles();
+                                fprintf('New assignments made: %d\n', assignmentsMade);
+                            else
+                                fprintf('Warning: Failed to plan return path!\n');
+                            end
+                        end
+                        
+                    else  % Handle ground vehicles
+                        idx = str2double(vehicleID(7:end));
+                        platform = obj.groundPlatforms{idx};
+                        currentMotion = platform.read();
+                        vehiclePos = currentMotion(1:3);
+                        
+                        % Calculate distances
+                        distToSurvivor = norm(survivor.Position - vehiclePos);
+                        horizontalDist = norm(survivor.Position(1:2) - vehiclePos(1:2));
+                        
+                        fprintf('\n=== Ground%d Position Analysis ===\n', idx);
+                        fprintf('1. Position Data:\n');
+                        fprintf('  - Vehicle: [%.2f, %.2f, %.2f]\n', ...
+                            vehiclePos(1), vehiclePos(2), vehiclePos(3));
+                        fprintf('  - Survivor: [%.2f, %.2f, %.2f]\n', ...
+                            survivor.Position(1), survivor.Position(2), survivor.Position(3));
+                        
+                        fprintf('2. Distance Analysis:\n');
+                        fprintf('  - 3D distance: %.2f\n', distToSurvivor);
+                        fprintf('  - Horizontal distance: %.2f\n', horizontalDist);
+                        fprintf('  - Detection threshold: %.2f\n', DETECTION_RADIUS);
+                        
+                        if distToSurvivor < DETECTION_RADIUS
+                            fprintf('\n=== Ground Detection Event ===\n');
+                            fprintf('Ground%d detecting survivor %d\n', idx, survivorID);
+                            
+                            survivor.Status = 'DETECTED';
+                            obj.vehicleAssignments.remove(vehicleID);
+                            
+                            [assignmentsMade, ~] = obj.assignSurvivorsToVehicles();
+                            fprintf('New assignments requested: %d\n', assignmentsMade);
+                            
+                            if assignmentsMade > 0 && obj.vehicleAssignments.isKey(vehicleID)
+                                newSurvivorID = obj.vehicleAssignments(vehicleID);
+                                newSurvivor = obj.findSurvivorByID(newSurvivorID);
                                 
-                                fprintf('Debug: UAV%d - Horizontal dist: %.2f, Height diff: %.2f\n', ...
-                                    idx, horizontal_dist, height_diff);
-                                
-                                % If we're close horizontally, initiate descent
-                                if horizontal_dist < DETECTION_RADIUS * 2  % Double radius for descent initiation
-                                % Calculate descent target
-                                  descentHeight = survivor.Position(3) + AERIAL_DETECTION_HEIGHT;
-                                  fprintf('Debug: UAV%d planning descent from %.2f to %.2f meters\n', ...
-                                       idx, vehiclePos(3), descentHeight);
-                                    
-                                    % Create descent path point
-                                    descentPos = vehiclePos;
-                                    descentPos(3) = descentHeight;
-                                    [success, descentPath] = obj.planPath(vehiclePos, descentPos, true);
+                                if ~isempty(newSurvivor)
+                                    fprintf('Planning path to new survivor %d\n', newSurvivorID);
+                                    [success, newPath] = obj.planPath(vehiclePos, newSurvivor.Position, false);
                                     
                                     if success
-                                        fprintf('Debug: Planned descent for UAV%d\n', idx);
-                                        obj.vehiclePaths{idx} = descentPath;
-                                    end
-                                end
-                                
-                                % Check if we're close enough to detect
-                                if horizontal_dist < DETECTION_RADIUS && height_diff < 2.0
-                                    fprintf('Vehicle %s detected survivor %d\n', vehicleID, survivorID);
-                                    survivor.Status = 'DETECTED';
-                                    obj.vehicleAssignments.remove(vehicleID);
-                                    
-                                    % Plan return to cruise height and assign new survivor
-                                    returnPos = vehiclePos;
-                                    returnPos(3) = obj.CRUISE_HEIGHT;
-                                    [success, path] = obj.planPath(vehiclePos, returnPos, true);
-                                    if success
-                                        obj.vehiclePaths{idx} = path;
-                                        [assignmentsMade, ~] = obj.assignSurvivorsToVehicles();
-                                        if assignmentsMade > 0
-                                            fprintf('Debug: UAV%d assigned to new survivor after detection\n', idx);
-                                        end
-                                    end
-                                end
-                           else  % Ground vehicle logic
-                                idx = str2double(vehicleID(7:end));
-                                platform = obj.groundPlatforms{idx};
-                                if ~isempty(platform)
-                                    currentMotion = platform.read();
-                                    vehiclePos = currentMotion(1:3);
-                                    dist = norm(survivor.Position - vehiclePos);
-                                    
-                                    fprintf('Debug: Ground%d - Distance to survivor: %.2f\n', idx, dist);
-                                    
-                                    if dist < DETECTION_RADIUS
-                                        fprintf('Vehicle %s detected survivor %d\n', vehicleID, survivorID);
-                                        survivor.Status = 'DETECTED';
-                                        obj.vehicleAssignments.remove(vehicleID);
-                                        
-                                        % Force immediate reassignment
-                                        [assignmentsMade, assignedIDs] = obj.assignSurvivorsToVehicles();
-                                        if assignmentsMade > 0
-                                            fprintf('Debug: Ground%d immediately assigned to new survivor\n', idx);
-                                            
-                                            % Find new survivor assignment
-                                            newSurvivorID = [];
-                                            for id = assignedIDs
-                                                if obj.vehicleAssignments.isKey(vehicleID) && ...
-                                                   obj.vehicleAssignments(vehicleID) == id
-                                                    newSurvivorID = id;
-                                                    break;
-                                                end
-                                            end
-                                            
-                                            if ~isempty(newSurvivorID)
-                                                newSurvivor = obj.findSurvivorByID(newSurvivorID);
-                                                if ~isempty(newSurvivor)
-                                                    % Plan path to new survivor
-                                                    [success, newPath] = obj.planPath(vehiclePos, ...
-                                                        newSurvivor.Position, false);
-                                                    if success
-                                                        obj.vehiclePaths{obj.numAerialVehicles + idx} = newPath;
-                                                        fprintf('Debug: Ground%d path planned to new survivor %d\n', ...
-                                                            idx, newSurvivorID);
-                                                    end
-                                                end
-                                            end
-                                        end
+                                        obj.vehiclePaths{obj.numAerialVehicles + idx} = newPath;
+                                        fprintf('New path planned: %d waypoints\n', size(newPath, 1));
+                                    else
+                                        fprintf('Warning: Failed to plan path to new survivor!\n');
                                     end
                                 end
                             end
-                    catch e
-                        fprintf('Debug: Error checking detection for vehicle %s: %s\n', ...
-                            vehicleID, e.message);
-                        fprintf('Debug: Error stack trace: %s\n', getReport(e));
+                        end
                     end
                 end
+                
+            catch e
+                fprintf('\n=== Error in Detection ===\n');
+                fprintf('Error type: %s\n', e.identifier);
+                fprintf('Message: %s\n', e.message);
+                fprintf('Stack trace:\n%s\n', getReport(e));
             end
         end
+        
+        % Print final status summary
+        fprintf('\n=== Final Status Summary ===\n');
+        survivors = obj.survivorManager.Survivors;
+        for i = 1:length(survivors)
+            fprintf('Survivor %d:\n', survivors(i).ID);
+            fprintf('  - Status: %s\n', survivors(i).Status);
+            fprintf('  - Position: [%.1f, %.1f, %.1f]\n', ...
+                survivors(i).Position(1), survivors(i).Position(2), survivors(i).Position(3));
+        end
+        fprintf('\n');
+    end
+end
 
         function survivor = findSurvivorByID(obj, survivorID)
             survivor = [];
@@ -842,99 +770,113 @@ classdef centralController_RRT < handle
         end
 
 
-        function pos = getVehiclePosition(obj, vehicleID)
-            if contains(vehicleID, 'UAV')
-                idx = str2double(vehicleID(4:end));
-                platform = obj.aerialPlatforms{idx};
-            else
-                idx = str2double(vehicleID(7:end));
-                platform = obj.groundPlatforms{idx};
-            end
-            currentMotion = platform.read();
-            pos = currentMotion(1:3);
-        end
-
-
-      function visualizeCurrentState(obj, ax)
-            % Plot aerial vehicles and their paths
-            for i = 1:obj.numAerialVehicles
-                if ~isempty(obj.aerialPlatforms{i})
-                    currentMotion = obj.aerialPlatforms{i}.read();
-                    currentPos = currentMotion(1:3);
-                    
-                    % Plot current position
-                    scatter3(ax, currentPos(1), currentPos(2), currentPos(3), 100, 'ro', ...
-                        'filled', 'MarkerEdgeColor', 'k', 'LineWidth', 2, ...
-                        'Tag', 'vehicle');
-                    
-                    % Plot only the current active path
-                    if ~isempty(obj.vehiclePaths{i})
-                        path = obj.vehiclePaths{i};
-                        h = plot3(ax, path(:,1), path(:,2), path(:,3), 'r-', ...
-                            'LineWidth', 2, 'Tag', 'path');
-                        
-                        % Add direction arrow
-                        if size(path, 1) > 1
-                            quiver3(ax, currentPos(1), currentPos(2), currentPos(3), ...
-                                path(1,1)-currentPos(1), ...
-                                path(1,2)-currentPos(2), ...
-                                path(1,3)-currentPos(3), ...
-                                0, 'r', 'LineWidth', 2, 'MaxHeadSize', 1);
+        function visualizeCurrentState(obj, ax)
+            try
+                % Ensure axis is valid
+                if ~isvalid(ax)
+                    return;
+                end
+                
+                hold(ax, 'on');
+                
+                % First, draw the environment if it hasn't been drawn
+                children = get(ax, 'Children');
+                hasEnvironment = false;
+                if ~isempty(children)
+                    for child = children'
+                        if isvalid(child) && isprop(child, 'Tag') && strcmp(get(child, 'Tag'), 'environment')
+                            hasEnvironment = true;
+                            break;
                         end
                     end
                 end
-            end
-            
-            % Plot ground vehicles and their paths
-            for i = 1:obj.numGroundVehicles
-                if ~isempty(obj.groundPlatforms{i})
-                    currentMotion = obj.groundPlatforms{i}.read();
-                    currentPos = currentMotion(1:3);
-                    
-                    % Plot current position
-                    scatter3(ax, currentPos(1), currentPos(2), currentPos(3), 100, 'bs', ...
-                        'filled', 'MarkerEdgeColor', 'k', 'LineWidth', 2, ...
-                        'Tag', 'vehicle');
-                    
-                    % Plot only the current active path
-                    idx = obj.numAerialVehicles + i;
-                    if ~isempty(obj.vehiclePaths{idx})
-                        path = obj.vehiclePaths{idx};
-                        h = plot3(ax, path(:,1), path(:,2), path(:,3), 'b-', ...
-                            'LineWidth', 2, 'Tag', 'path');
-                        
-                        % Add direction arrow
-                        if size(path, 1) > 1
-                            quiver3(ax, currentPos(1), currentPos(2), currentPos(3), ...
-                                path(1,1)-currentPos(1), ...
-                                path(1,2)-currentPos(2), ...
-                                0, ... % Keep z component 0 for ground vehicle
-                                0, 'b', 'LineWidth', 2, 'MaxHeadSize', 1);
+                
+                if ~hasEnvironment
+                    obj.environment.show();
+                    % Tag new environment objects
+                    newChildren = get(ax, 'Children');
+                    for child = newChildren'
+                        if isvalid(child) && ~strcmp(get(child, 'Tag'), 'building')
+                            set(child, 'Tag', 'environment');
                         end
                     end
                 end
-            end
-            
-            % Add vehicle labels
-            for i = 1:obj.numAerialVehicles
-                if ~isempty(obj.aerialPlatforms{i})
-                    currentMotion = obj.aerialPlatforms{i}.read();
-                    currentPos = currentMotion(1:3);
-                    text(ax, currentPos(1), currentPos(2), currentPos(3)+5, ...
-                        sprintf('UAV%d', i), 'Color', 'red');
+        
+                % Plot aerial vehicles and their paths
+                for i = 1:obj.numAerialVehicles
+                    if ~isempty(obj.aerialPlatforms{i})
+                        currentMotion = obj.aerialPlatforms{i}.read();
+                        if ~isempty(currentMotion)
+                            currentPos = currentMotion(1:3);
+                            
+                            % Plot current position
+                            scatter3(ax, currentPos(1), currentPos(2), currentPos(3), 100, 'ro', ...
+                                'filled', 'MarkerEdgeColor', 'k', 'LineWidth', 2, ...
+                                'Tag', 'vehicle');
+                            
+                            % Plot only the current active path
+                            if ~isempty(obj.vehiclePaths{i})
+                                path = obj.vehiclePaths{i};
+                                plot3(ax, path(:,1), path(:,2), path(:,3), 'r-', ...
+                                    'LineWidth', 2, 'Tag', 'path');
+                                
+                                % Add direction arrow
+                                if size(path, 1) > 1
+                                    quiver3(ax, currentPos(1), currentPos(2), currentPos(3), ...
+                                        path(1,1)-currentPos(1), ...
+                                        path(1,2)-currentPos(2), ...
+                                        path(1,3)-currentPos(3), ...
+                                        0, 'r', 'LineWidth', 2, 'MaxHeadSize', 1);
+                                end
+                            end
+                            
+                            % Add label
+                            text(ax, currentPos(1), currentPos(2), currentPos(3)+5, ...
+                                sprintf('UAV%d', i), 'Color', 'red', 'Tag', 'label');
+                        end
+                    end
                 end
-            end
-            
-            for i = 1:obj.numGroundVehicles
-                if ~isempty(obj.groundPlatforms{i})
-                    currentMotion = obj.groundPlatforms{i}.read();
-                    currentPos = currentMotion(1:3);
-                    text(ax, currentPos(1), currentPos(2), currentPos(3)+5, ...
-                        sprintf('Ground%d', i), 'Color', 'blue');
+                
+                % Plot ground vehicles and their paths
+                for i = 1:obj.numGroundVehicles
+                    if ~isempty(obj.groundPlatforms{i})
+                        currentMotion = obj.groundPlatforms{i}.read();
+                        if ~isempty(currentMotion)
+                            currentPos = currentMotion(1:3);
+                            
+                            % Plot current position
+                            scatter3(ax, currentPos(1), currentPos(2), currentPos(3), 100, 'bs', ...
+                                'filled', 'MarkerEdgeColor', 'k', 'LineWidth', 2, ...
+                                'Tag', 'vehicle');
+                            
+                            % Plot only the current active path
+                            idx = obj.numAerialVehicles + i;
+                            if ~isempty(obj.vehiclePaths{idx})
+                                path = obj.vehiclePaths{idx};
+                                plot3(ax, path(:,1), path(:,2), path(:,3), 'b-', ...
+                                    'LineWidth', 2, 'Tag', 'path');
+                                
+                                % Add direction arrow
+                                if size(path, 1) > 1
+                                    quiver3(ax, currentPos(1), currentPos(2), currentPos(3), ...
+                                        path(1,1)-currentPos(1), ...
+                                        path(1,2)-currentPos(2), ...
+                                        0, ... % Keep z component 0 for ground vehicle
+                                        0, 'b', 'LineWidth', 2, 'MaxHeadSize', 1);
+                                end
+                            end
+                            
+                            % Add label
+                            text(ax, currentPos(1), currentPos(2), currentPos(3)+5, ...
+                                sprintf('Ground%d', i), 'Color', 'blue', 'Tag', 'label');
+                        end
+                    end
                 end
+                
+            catch e
+                fprintf('Error in visualizeCurrentState: %s\n', getReport(e));
             end
-        end
-                        
+        end                   
         function updateVehiclePaths(obj)
             % Update paths for all vehicles if needed
             for i = 1:obj.numAerialVehicles
@@ -1025,6 +967,8 @@ classdef centralController_RRT < handle
             distance = norm(direction);
             
             fprintf('Debug: Distance to next waypoint: %.2f\n', distance);
+            fprintf('Debug: Next waypoint: [%.2f, %.2f, %.2f]\n', ...
+                nextWaypoint(1), nextWaypoint(2), nextWaypoint(3));
             
             if distance < obj.REPLAN_DISTANCE
                 % Remove reached waypoint
@@ -1061,6 +1005,13 @@ classdef centralController_RRT < handle
             fprintf('Debug: Moving to [%.2f, %.2f, %.2f] with velocity [%.2f, %.2f, %.2f]\n', ...
                 newMotion(1), newMotion(2), newMotion(3), ...
                 newMotion(4), newMotion(5), newMotion(6));
+                
+            % Verify movement occurred
+            newPos = platform.read();
+            if norm(newPos(1:3) - currentPos) < 1e-6
+                fprintf('Warning: Vehicle appears to be stuck! Current pos: [%.2f, %.2f, %.2f]\n', ...
+                    currentPos(1), currentPos(2), currentPos(3));
+            end
         end
        function needsReplan = needsReplanning(obj, currentPos, path)
             % Always replan if path is empty
