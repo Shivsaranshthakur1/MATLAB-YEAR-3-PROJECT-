@@ -174,54 +174,55 @@ classdef searchRescueEnvironment < handle
         end
         
        function show(obj)
-            % Create figure and show scenario
-            ax = gca;
-            hold(ax, 'on');
-            
-            % Show occupancy map
-            show(obj.occupancyMap, 'Parent', ax);
-            
-            % Plot buildings as 3D boxes
-            for i = 1:length(obj.buildingList)
-                building = obj.buildingList(i);
-                pos = building.position;
-                dims = building.dimensions;
+            try
+                % Create figure and show scenario
+                ax = gca;
+                hold(ax, 'on');
                 
-                % Create building vertices
-                [X,Y,Z] = obj.createBuildingBox(pos, dims);
+                % Show occupancy map
+                show(obj.occupancyMap, 'Parent', ax);
                 
-                % Plot building faces
-                fill3(X(:,[1 2 3 4 1])', Y(:,[1 2 3 4 1])', Z(:,[1 2 3 4 1])', [0.8 0.8 0.8], 'EdgeColor', [0.5 0.5 0.5]);
-                fill3(X(:,[5 6 7 8 5])', Y(:,[5 6 7 8 5])', Z(:,[5 6 7 8 5])', [0.8 0.8 0.8], 'EdgeColor', [0.5 0.5 0.5]);
-                fill3(X(:,[1 5 8 4 1])', Y(:,[1 5 8 4 1])', Z(:,[1 5 8 4 1])', [0.7 0.7 0.7], 'EdgeColor', [0.5 0.5 0.5]);
-                fill3(X(:,[2 6 7 3 2])', Y(:,[2 6 7 3 2])', Z(:,[2 6 7 3 2])', [0.7 0.7 0.7], 'EdgeColor', [0.5 0.5 0.5]);
-                fill3(X(:,[4 8 7 3 4])', Y(:,[4 8 7 3 4])', Z(:,[4 8 7 3 4])', [0.9 0.9 0.9], 'EdgeColor', [0.5 0.5 0.5]);
-                fill3(X(:,[1 5 6 2 1])', Y(:,[1 5 6 2 1])', Z(:,[1 5 6 2 1])', [0.9 0.9 0.9], 'EdgeColor', [0.5 0.5 0.5]);
+                % Plot buildings as 3D boxes
+                for i = 1:length(obj.buildingList)
+                    building = obj.buildingList(i);
+                    pos = building.position;
+                    dims = building.dimensions;
+                    
+                    % Create building vertices
+                    [X,Y,Z] = obj.createBuildingBox(pos, dims);
+                    
+                    % Plot building faces and store handles
+                    h1 = fill3(ax, X(:,[1 2 3 4 1])', Y(:,[1 2 3 4 1])', Z(:,[1 2 3 4 1])', ...
+                        [0.8 0.8 0.8], 'EdgeColor', [0.5 0.5 0.5]);
+                    h2 = fill3(ax, X(:,[5 6 7 8 5])', Y(:,[5 6 7 8 5])', Z(:,[5 6 7 8 5])', ...
+                        [0.8 0.8 0.8], 'EdgeColor', [0.5 0.5 0.5]);
+                    h3 = fill3(ax, X(:,[1 5 8 4 1])', Y(:,[1 5 8 4 1])', Z(:,[1 5 8 4 1])', ...
+                        [0.7 0.7 0.7], 'EdgeColor', [0.5 0.5 0.5]);
+                    h4 = fill3(ax, X(:,[2 6 7 3 2])', Y(:,[2 6 7 3 2])', Z(:,[2 6 7 3 2])', ...
+                        [0.7 0.7 0.7], 'EdgeColor', [0.5 0.5 0.5]);
+                    h5 = fill3(ax, X(:,[4 8 7 3 4])', Y(:,[4 8 7 3 4])', Z(:,[4 8 7 3 4])', ...
+                        [0.9 0.9 0.9], 'EdgeColor', [0.5 0.5 0.5]);
+                    h6 = fill3(ax, X(:,[1 5 6 2 1])', Y(:,[1 5 6 2 1])', Z(:,[1 5 6 2 1])', ...
+                        [0.9 0.9 0.9], 'EdgeColor', [0.5 0.5 0.5]);
+                    
+                    % Set tags for all building faces
+                    set([h1 h2 h3 h4 h5 h6], 'Tag', 'building');
+                end
+                
+                % Plot obstacles
+                for i = 1:size(obj.obstacles.config, 1)
+                    config = obj.obstacles.config(i,:);
+                    [X,Y,Z] = cylinder(config(3), 20);
+                    X = X * config(3) + config(1);
+                    Y = Y * config(3) + config(2);
+                    Z = Z * config(4);
+                    surf(ax, X, Y, Z, 'FaceColor', [0.6 0.6 0.6], ...
+                        'EdgeColor', 'none', 'Tag', 'building');
+                end
+                
+            catch e
+                fprintf('Error in environment show: %s\n', getReport(e));
             end
-            
-            % Plot obstacles as cylinders
-            for i = 1:size(obj.obstacles.config, 1)
-                config = obj.obstacles.config(i,:);
-                [X,Y,Z] = cylinder(config(3), 20);
-                X = X * config(3) + config(1);
-                Y = Y * config(3) + config(2);
-                Z = Z * config(4);
-                surf(X, Y, Z, 'FaceColor', [0.6 0.6 0.6], 'EdgeColor', 'none');
-            end
-            
-            % Set view properties
-            grid on;
-            axis equal;
-            
-            % Set axis limits
-            xlim([0 obj.dimensions(1)]);
-            ylim([0 obj.dimensions(2)]);
-            zlim([0 obj.dimensions(3)]);
-            
-            % Add labels
-            xlabel('X (meters)');
-            ylabel('Y (meters)');
-            zlabel('Z (meters)');
         end
 
         function [X,Y,Z] = createBuildingBox(obj, pos, dims)
